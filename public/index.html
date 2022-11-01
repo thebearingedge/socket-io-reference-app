@@ -5,14 +5,156 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Socket App</title>
   <link rel="icon" href="/favicon.svg">
+  <style>
+    ul#rooms {
+      list-style: none;
+      padding-left: 0;
+      width: 320px;
+    }
+
+    ul#rooms > li {
+      padding: 0.5rem 0;
+      cursor: pointer;
+    }
+
+    ul#rooms > li.joined {
+      text-decoration: underline;
+    }
+
+    ol#messages {
+      list-style: none;
+      padding-left: 0;
+    }
+
+    main {
+      display: flex;
+    }
+  </style>
 </head>
 <body>
-  <h1>Socket App</h1>
+  <header>
+    <h1>Socket App</h1>
+  </header>
+  <main>
+    <div>
+      <h2>rooms</h2>
+      <ul id="rooms">
+
+      </ul>
+    </div>
+    <div>
+      <h2 id="conversation">#general</h2>
+      <ol id="messages">
+
+      </ol>
+      <form id="chat-box">
+        <label>
+          Chat
+          <input type="text" name="message" placeholder="say something...">
+          <button type="submit">Send</button>
+        </label>
+      </form>
+    </div>
+  </main>
+  <div>
+  </div>
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    const socket = window.io('/')
-    socket.on('pong', () => console.log('got pong'))
-    socket.on('connect', () => socket.emit('ping'))
+    const $heading = document.querySelector('h1')
+    const $conversation = document.querySelector('#conversation')
+    const $rooms = document.querySelector('#rooms')
+    const $messages = document.querySelector('#messages')
+    const $chatBox = document.querySelector('#chat-box')
+  </script>
+  <script>
+    let socket
+    let _room
+    let _username
+
+    fetch('/api/rooms')
+      .then(res => res.json())
+      .then(rooms => {
+
+        rooms.forEach(room => {
+          const $room = document.createElement('li')
+          $room.textContent = '#' + room
+          $room.dataset.roomName = room
+          $rooms.append($room)
+        })
+
+        socket = window.io('/')
+
+        socket.once('joined', () => {
+          $chatBox.addEventListener('submit', event => {
+            event.preventDefault()
+            const { value: message } = event.target.elements.message
+            event.target.reset()
+            const req = {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                from: _username,
+                to: _room,
+                message
+              })
+            }
+            fetch('/api/messages', req)
+          })
+        })
+
+        socket.on('joined', ({ username, room, messages }) => {
+          _room = room
+          _username = username
+          $heading.textContent = 'Welcome ' + username + '!'
+          $conversation.textContent = '#' + room
+          $messages.innerHTML = ''
+          messages.forEach(message => {
+            const $message = renderMessage(message)
+            $messages.append($message)
+          })
+          $rooms.querySelectorAll('li').forEach($room => {
+            $room.classList.toggle('joined', $room.dataset.roomName === room)
+          })
+        })
+
+        socket.on('message', ({ from, to, message, when }) => {
+          if (to !== _room) return
+          const $message = renderMessage({ from, message, when })
+          $messages.append($message)
+        })
+
+        $rooms.addEventListener('click', event => {
+          if (!event.target.matches('[data-room-name]')) return
+          socket.emit('join', event.target.dataset.roomName)
+        })
+      })
+
+  </script>
+  <script>
+
+  </script>
+  <script>
+    const dateFormat = new Intl.DateTimeFormat('en-US', {
+      dateStyle: 'short',
+      timeStyle: 'short'
+    })
+
+    function renderMessage(message) {
+      const $message = document.createElement('li')
+      const $username = document.createElement('strong')
+      $username.textContent = message.from + ' '
+      const $time = document.createElement('small')
+      $time.textContent = dateFormat.format(new Date(message.when))
+      const $text = document.createElement('div')
+      $text.textContent = message.message
+      $message.append($username, $time, $text)
+      return $message
+    }
+  </script>
+  <script>
+
   </script>
 </body>
 </html>
